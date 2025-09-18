@@ -1,4 +1,7 @@
+import { db } from '../db';
+import { agentEventsTable, workspacesTable } from '../db/schema';
 import { type AgentProposeInput, type AgentEvent } from '../schema';
+import { eq } from 'drizzle-orm';
 
 export interface AgentProposalResponse {
     agent_event: AgentEvent;
@@ -6,24 +9,39 @@ export interface AgentProposalResponse {
 }
 
 export const agentPropose = async (input: AgentProposeInput): Promise<AgentProposalResponse> => {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to:
-    // 1. Create a draft agent event for user approval
-    // 2. Store the rationale for why the agent is proposing this action
-    // 3. Return the proposal for display in SilentTray
-    const mockAgentEvent: AgentEvent = {
-        id: 0,
-        workspace_id: input.workspace_id,
-        agent: input.agent,
-        action: input.action,
-        input: input.input,
-        output: null,
-        status: 'awaiting_confirmation',
-        created_at: new Date()
-    };
+    try {
+        // Verify workspace exists to ensure foreign key constraint is satisfied
+        const workspace = await db.select()
+            .from(workspacesTable)
+            .where(eq(workspacesTable.id, input.workspace_id))
+            .limit(1)
+            .execute();
 
-    return Promise.resolve({
-        agent_event: mockAgentEvent,
-        rationale: input.rationale
-    });
+        if (workspace.length === 0) {
+            throw new Error(`Workspace with id ${input.workspace_id} not found`);
+        }
+
+        // Create a draft agent event for user approval
+        const result = await db.insert(agentEventsTable)
+            .values({
+                workspace_id: input.workspace_id,
+                agent: input.agent,
+                action: input.action,
+                input: input.input,
+                output: null,
+                status: 'awaiting_confirmation'
+            })
+            .returning()
+            .execute();
+
+        const agentEvent = result[0];
+
+        return {
+            agent_event: agentEvent as AgentEvent,
+            rationale: input.rationale
+        };
+    } catch (error) {
+        console.error('Agent proposal creation failed:', error);
+        throw error;
+    }
 };

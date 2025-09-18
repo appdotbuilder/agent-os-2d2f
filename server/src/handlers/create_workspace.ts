@@ -1,13 +1,26 @@
+import { db } from '../db';
+import { workspacesTable } from '../db/schema';
 import { type CreateWorkspaceInput, type Workspace } from '../schema';
 
 export const createWorkspace = async (input: CreateWorkspaceInput): Promise<Workspace> => {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is creating a new workspace and persisting it in the database.
-    return Promise.resolve({
-        id: 0, // Placeholder ID
+  try {
+    // Insert workspace record
+    const result = await db.insert(workspacesTable)
+      .values({
         owner_id: input.owner_id,
         name: input.name,
-        settings: input.settings || {},
-        created_at: new Date()
-    } as Workspace);
+        settings: input.settings || {}
+      })
+      .returning()
+      .execute();
+
+    const workspace = result[0];
+    return {
+      ...workspace,
+      settings: workspace.settings as Record<string, unknown>
+    };
+  } catch (error) {
+    console.error('Workspace creation failed:', error);
+    throw error;
+  }
 };

@@ -1,3 +1,5 @@
+import { db } from '../db';
+import { agentEventsTable } from '../db/schema';
 import { type CreateCalendarDraftInput, type AgentEvent } from '../schema';
 
 export interface CalendarDraftResponse {
@@ -12,30 +14,41 @@ export interface CalendarDraftResponse {
 }
 
 export const createCalendarDraft = async (input: CreateCalendarDraftInput): Promise<CalendarDraftResponse> => {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is to:
-    // 1. Create a draft calendar event (not yet published to Google Calendar)
-    // 2. Create an agent event for user approval
-    // 3. Return both for display in SilentTray
-    const mockAgentEvent: AgentEvent = {
-        id: 0,
-        workspace_id: input.workspace_id,
-        agent: 'SchedulerAgent',
-        action: 'create_calendar_event',
-        input: input as Record<string, unknown>,
-        output: null,
-        status: 'awaiting_confirmation',
-        created_at: new Date()
-    };
-
-    return Promise.resolve({
-        draft_event: mockAgentEvent,
-        calendar_event_preview: {
+    try {
+        // Create the calendar event preview object
+        const calendar_event_preview = {
             title: input.title,
             description: input.description,
             start_time: input.start_time,
             end_time: input.end_time,
             attendees: input.attendees
-        }
-    });
+        };
+
+        // Create an agent event record for user approval
+        const result = await db.insert(agentEventsTable)
+            .values({
+                workspace_id: input.workspace_id,
+                agent: 'SchedulerAgent',
+                action: 'create_calendar_event',
+                input: input as any,
+                output: null, // No output yet since it's awaiting confirmation
+                status: 'awaiting_confirmation'
+            })
+            .returning()
+            .execute();
+
+        const draft_event = {
+            ...result[0],
+            input: result[0].input as Record<string, unknown>,
+            output: result[0].output as Record<string, unknown> | null
+        };
+
+        return {
+            draft_event,
+            calendar_event_preview
+        };
+    } catch (error) {
+        console.error('Calendar draft creation failed:', error);
+        throw error;
+    }
 };
